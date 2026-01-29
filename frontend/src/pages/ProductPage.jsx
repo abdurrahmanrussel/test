@@ -18,7 +18,7 @@ export default function ProductPage() {
   // ================= BUY NOW FUNCTION =================
   const buyNow = async (product) => {
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4242'
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
       const res = await fetch(`${backendUrl}/api/create-checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
