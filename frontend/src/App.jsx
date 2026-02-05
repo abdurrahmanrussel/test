@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Button from './components/Button'
 import HeroCarousel from './components/HeroCarousel'
+import FloatingChatbot from './components/FloatingChatbot';
 
 import 'swiper/css'
 import 'swiper/css/pagination'
@@ -157,14 +158,14 @@ function App() {
 
   return (
     <MainLayout showAllProducts={showAllProducts}>
-      <section className="py-24 px-8 max-w-7xl mx-auto">
+      {/*<section className="py-24 px-8 max-w-7xl mx-auto">
         <HeroCarousel loading="eager" />
-      </section>
+      </section>*/}
 
-      <section ref={indicatorsRef} className="py-32 bg-slate-50" id="products">
+      {/*<section ref={indicatorsRef} className="py-32 bg-slate-50" id="products">
         <h2 className="text-5xl text-center mb-20">Indicators</h2>
         {renderProducts(indicators, indicatorsToShow, setIndicatorsToShow)}
-      </section>
+      </section>*/}
 
       <section ref={strategiesRef} className="py-32">
         <h2 className="text-5xl text-center mb-20">Strategies</h2>
@@ -172,7 +173,9 @@ function App() {
       </section>
 
       <div id="lazy-prefetch-trigger" />
+      {/*  <FloatingChatbot /> */}
     </MainLayout>
+    
   )
 }
 

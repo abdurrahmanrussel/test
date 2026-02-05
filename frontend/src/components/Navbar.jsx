@@ -1,11 +1,18 @@
 import React from 'react'
 import logo from '../assets/logo.png'
 import Button from './Button'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 const Navbar = ({ showAllProducts }) => {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user, isAuthenticated, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
 
   const handleLogoClick = () => {
     if (location.pathname === '/') {
@@ -45,9 +52,38 @@ const Navbar = ({ showAllProducts }) => {
         </nav>
 
         <div className="flex items-center gap-4">
-          <Button className="bg-transparent text-blue-600 shadow-none hover:bg-blue-50">
-            Login
-          </Button>
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/account/settings"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Settings
+              </Link>
+              <span className="text-sm text-slate-700 hidden sm:block">
+                Hi, {user?.name}
+              </span>
+              <Button
+                onClick={handleLogout}
+                className="bg-transparent text-blue-600 shadow-none hover:bg-blue-50"
+              >
+                Logout
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link to="/login">
+                <Button className="bg-transparent text-blue-600 shadow-none hover:bg-blue-50">
+                  Login
+                </Button>
+              </Link>
+              <Link to="/register">
+                <Button className="bg-blue-600 text-white">
+                  Sign Up
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
 
       </div>

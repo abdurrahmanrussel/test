@@ -8,10 +8,14 @@ console.log('ENV:', process.env.AIRTABLE_BASE_ID, process.env.AIRTABLE_TABLE_NAM
 
 import express from 'express'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import Stripe from 'stripe'
 import fetch from 'node-fetch'
 import https from 'https'
 import dns from 'dns'
+import authController from './controllers/authController.js'
+import { authenticateToken, generateCSRFToken } from './middleware/auth.js'
+import { apiLimiter, authLimiter, passwordResetLimiter } from './middleware/rateLimiter.js'
 
 dns.setDefaultResultOrder('ipv4first')
 
@@ -24,7 +28,13 @@ const httpsAgent = new https.Agent({
   family: 4,
 })
 
-app.use(cors({ origin: 'http://localhost:5173' }))
+app.use(cors({ 
+  origin: 'http://localhost:5173',
+  credentials: true, // Allow cookies
+}))
+
+// Parse cookies
+app.use(cookieParser())
 
 // ⬇️ IMPORTANT: Webhook route MUST come BEFORE express.json()
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -61,6 +71,56 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
 app.use(express.json())
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+
+// ===============================
+// TEST AIRTABLE TABLES
+// ===============================
+app.get('/api/test-tables', async (req, res) => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    // Test Products Info table
+    const productsRes = await fetch(
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent(process.env.AIRTABLE_TABLE_NAME)}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.AIRTABLE_PAT}` },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeoutId);
+
+    // Test Users table
+    const usersRes = await fetch(
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${process.env.AIRTABLE_USERS_TABLE_ID}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.AIRTABLE_PAT}` },
+        signal: controller.signal,
+      }
+    );
+
+    const productsData = await productsRes.json();
+    const usersData = await usersRes.json();
+
+    res.json({
+      productsTable: {
+        name: process.env.AIRTABLE_TABLE_NAME,
+        accessible: productsRes.ok,
+        recordCount: productsData.records?.length || 0,
+        status: productsRes.status,
+      },
+      usersTable: {
+        id: process.env.AIRTABLE_USERS_TABLE_ID,
+        accessible: usersRes.ok,
+        recordCount: usersData.records?.length || 0,
+        status: usersRes.status,
+      },
+    });
+  } catch (err) {
+    console.error('Test tables error:', err);
+    res.status(500).json({ error: 'Failed to test tables' });
+  }
+});
 
 // ===============================
 // GET PRODUCTS
@@ -172,9 +232,86 @@ app.get('/api/checkout-session', async (req, res) => {
 })
 
 // ===============================
+// CSRF TOKEN ENDPOINT
+// ===============================
+app.get('/api/csrf-token', (req, res) => {
+  const csrfToken = generateCSRFToken()
+  res.cookie('csrf_token', csrfToken, {
+    httpOnly: false, // Allow frontend to read
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    sameSite: 'strict',
+    maxAge: 3600000, // 1 hour
+  })
+  res.json({ csrfToken })
+})
+
+// ===============================
+// AUTH ROUTES
+// ===============================
+
+// Register (with rate limiting)
+app.post(
+  '/api/auth/register',
+  authLimiter,
+  authController.registerValidation,
+  authController.register
+)
+
+// Login (with rate limiting)
+app.post(
+  '/api/auth/login',
+  authLimiter,
+  authController.loginValidation,
+  authController.login
+)
+
+// Refresh token
+app.post('/api/auth/refresh', authController.refreshToken)
+
+// Logout (clears refresh token)
+app.post('/api/auth/logout', authController.logout)
+
+// Email verification
+app.post('/api/auth/verify-email', authController.verifyEmail)
+app.post('/api/auth/resend-verification', authenticateToken, authController.resendVerification)
+
+// Change email
+app.post('/api/auth/change-email', authenticateToken, authController.changeEmail)
+
+// Delete account
+app.post('/api/auth/delete-account', authenticateToken, authController.deleteAccount)
+
+// Get current user profile
+app.get('/api/auth/me', authenticateToken, authController.getProfile)
+
+// Update profile
+app.put('/api/auth/profile', authenticateToken, authController.updateProfile)
+
+// Change password
+app.post('/api/auth/change-password', authenticateToken, authController.changePassword)
+
+// Forgot password (with strict rate limiting)
+app.post(
+  '/api/auth/forgot-password',
+  passwordResetLimiter,
+  authController.forgotPasswordValidation,
+  authController.forgotPassword
+)
+
+// Reset password (with strict rate limiting)
+app.post(
+  '/api/auth/reset-password',
+  passwordResetLimiter,
+  authController.resetPasswordValidation,
+  authController.resetPassword
+)
+
+// ===============================
 // START SERVER
 // ===============================
 app.listen(4242, () => {
   console.log('✅ Backend running on http://localhost:4242')
   console.log('📍 Webhook endpoint: http://localhost:4242/api/stripe-webhook')
+  console.log('🔐 Auth endpoints: /api/auth/*')
+  console.log('🛡️ Security features: Rate limiting, CSRF protection, Refresh tokens enabled')
 })

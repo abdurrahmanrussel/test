@@ -6,6 +6,7 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 import { Pagination, Autoplay } from 'swiper/modules'
 import 'swiper/css'
 import 'swiper/css/pagination'
+import ReactMarkdown from 'react-markdown'
 
 export default function ProductPage() {
   const { id } = useParams()
@@ -35,9 +36,9 @@ export default function ProductPage() {
 
   /* ================= COMMON FAQ ================= */
   const commonFaq = [
-    { question: 'What payment methods are accepted?', answer: 'We accept credit cards, debit cards, and PayPal.' },
+   /* { question: 'What payment methods are accepted?', answer: 'We accept credit cards, debit cards, and PayPal.' },
     { question: 'How long does delivery take?', answer: 'Delivery usually takes 3-7 business days.' },
-    { question: 'Can I return the product?', answer: 'Yes, you can return within 15 days of purchase.' },
+    { question: 'Can I return the product?', answer: 'Yes, you can return within 15 days of purchase.' }, */
   ]
 
   /* ================= FETCH PRODUCT ================= */
@@ -78,10 +79,13 @@ export default function ProductPage() {
           description: data.fields.Description,
           image: data.fields['Thumbnail URL'],
           gallery: data.fields['Gallery Images']
-            ? Array.isArray(data.fields['Gallery Images'])
-              ? data.fields['Gallery Images']
-              : [data.fields['Gallery Images']]
-            : [],
+  ? typeof data.fields['Gallery Images'] === 'string'
+    ? data.fields['Gallery Images'].split(',').map(url => url.trim())
+    : Array.isArray(data.fields['Gallery Images'])
+    ? data.fields['Gallery Images']
+    : []
+  : [],
+
           youtube: data.fields['Youtube Link'] || null,
           faq: [...dynamicFaq, ...commonFaq],
         })
@@ -113,7 +117,7 @@ export default function ProductPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-7xl mx-auto py-16 px-6 space-y-20 pb-36">
+      <div className="max-w-7xl mx-auto py-16 px-6 space-y-8 pb-36">
 
         {/* ================= HEADER ================= */}
         <div className="md:flex md:items-center md:space-x-12 space-y-8 md:space-y-0">
@@ -146,16 +150,19 @@ export default function ProductPage() {
         </div>
 
         {/* ================= DESCRIPTION ================= */}
-        {product.description && (
-          <section className="bg-white rounded-3xl shadow-lg p-8 md:p-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4 border-b pb-2 border-gray-200">
-              Description
-            </h2>
-            <p className="text-gray-700 text-lg md:text-xl leading-relaxed tracking-wide">
-              {product.description}
-            </p>
-          </section>
-        )}
+        <ReactMarkdown
+  components={{
+    p: ({ node, ...props }) => (
+      <p className="text-gray-700 text-lg md:text-xl leading-relaxed tracking-wide" {...props} />
+    ),
+    h1: ({ node, ...props }) => <h1 className="text-4xl font-bold my-4" {...props} />,
+    h2: ({ node, ...props }) => <h2 className="text-3xl font-bold my-3" {...props} />,
+    li: ({ node, ...props }) => <li className="ml-6 list-disc" {...props} />,
+  }}
+>
+  {product.description}
+</ReactMarkdown>
+
 
         {/* ================= YOUTUBE ================= */}
         {product.youtube && (
