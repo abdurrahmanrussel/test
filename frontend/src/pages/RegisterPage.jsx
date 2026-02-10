@@ -106,7 +106,7 @@ const RegisterPage = () => {
         return
       }
 
-      // Registration successful
+      // Registration successful - redirect to login (email verification required)
       setSuccessMessage('Account created! Check your email for verification link.')
       
       // Show success message for 3 seconds then navigate to login

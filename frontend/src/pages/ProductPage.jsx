@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import MainLayout from '../layouts/MainLayout'
 import Button from '../components/Button'
 import { Swiper, SwiperSlide } from 'swiper/react'
@@ -10,26 +10,56 @@ import ReactMarkdown from 'react-markdown'
 
 export default function ProductPage() {
   const { id } = useParams()
+  const location = useLocation()
   const [product, setProduct] = useState(null)
+  const [promoCode, setPromoCode] = useState(null)
+  const [finalPrice, setFinalPrice] = useState(null)
   const [faqOpenIndex, setFaqOpenIndex] = useState(null)
   const [showFixedBuy, setShowFixedBuy] = useState(false)
 
   const topBuyRef = useRef(null)
 
+  // Check for promo code from navigation state
+  useEffect(() => {
+    if (location.state?.promoCode && location.state?.finalPrice) {
+      setPromoCode(location.state.promoCode)
+      setFinalPrice(location.state.finalPrice)
+    }
+  }, [location])
+
   // ================= BUY NOW FUNCTION =================
   const buyNow = async (product) => {
     try {
       const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
+      const token = localStorage.getItem('token')
+      
       const res = await fetch(`${backendUrl}/api/create-checkout-session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: product.id }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          productId: product.id,
+          finalPrice: finalPrice || product.price
+        }),
       })
+      
+      if (!res.ok) {
+        if (res.status === 401) {
+          alert('Please login to purchase')
+          window.location.href = '/login'
+          return
+        }
+        throw new Error('Failed to create checkout session')
+      }
+      
       const data = await res.json()
       console.log('Checkout Response:', data)
       window.location.href = data.url
     } catch (err) {
       console.error('Checkout error:', err)
+      alert('Failed to create checkout. Please try again.')
     }
   }
   // ====================================================
@@ -133,9 +163,24 @@ export default function ProductPage() {
             <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight">
               {product.name}
             </h1>
-            <p className="text-4xl md:text-5xl font-bold text-gradient bg-clip-text text-transparent from-green-400 to-blue-500">
-              ${product.price}
-            </p>
+            {finalPrice ? (
+              <div className="flex items-baseline gap-3">
+                <p className="text-2xl text-gray-400 line-through">${product.price}</p>
+                <p className="text-4xl md:text-5xl font-bold text-gradient bg-clip-text text-transparent from-green-400 to-blue-500">
+                  ${finalPrice}
+                </p>
+              </div>
+            ) : (
+              <p className="text-4xl md:text-5xl font-bold text-gradient bg-clip-text text-transparent from-green-400 to-blue-500">
+                ${product.price}
+              </p>
+            )}
+            
+            {promoCode && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-green-600 font-medium">✓ Promo code applied: {promoCode}</span>
+              </div>
+            )}
 
             {/* ================= TOP BUY NOW BUTTON ================= */}
             <div ref={topBuyRef}>

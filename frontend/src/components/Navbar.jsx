@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 const Navbar = ({ showAllProducts }) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, logout, hasRole } = useAuth()
 
   const handleLogout = () => {
     logout()
@@ -54,6 +54,21 @@ const Navbar = ({ showAllProducts }) => {
         <div className="flex items-center gap-4">
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
+              {hasRole('admin') ? (
+                <Link
+                  to="/admin"
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  Admin
+                </Link>
+              ) : (
+                <Link
+                  to="/dashboard"
+                  className="text-sm text-green-600 hover:text-green-700 font-medium"
+                >
+                  Dashboard
+                </Link>
+              )}
               <Link
                 to="/account/settings"
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium"

@@ -3,6 +3,17 @@ import jwt from 'jsonwebtoken'
 import { body, validationResult } from 'express-validator'
 import * as userService from '../services/airtableUserService.js'
 import * as emailService from '../services/emailService.js'
+import https from 'https'
+import dns from 'dns'
+
+dns.setDefaultResultOrder('ipv4first')
+
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+  timeout: 20000,
+  family: 4,
+})
 
 // Validation rules
 export const registerValidation = [
@@ -108,19 +119,9 @@ export const register = async (req, res) => {
       // Continue with registration even if email fails
     }
 
-    // Generate token
-    const token = generateToken(newUser.id, email, 'user')
-
-    // Return success response (without password)
+    // Return success response (without tokens - email verification required)
     res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: {
-        id: newUser.id,
-        name: newUser.fields.Name,
-        email: newUser.fields.Email,
-        role: newUser.fields.Role,
-      },
+      message: 'User registered successfully. Please check your email for verification link.',
     })
   } catch (error) {
     console.error('Registration error:', error)
@@ -177,18 +178,24 @@ export const login = async (req, res) => {
       })
     }
 
-    // Generate token
-    const token = generateToken(user.id, email, user.fields.Role)
+    // Generate access token
+    const accessToken = generateToken(user.id, email, user.fields.Role)
+
+    // Generate refresh token
+    const refreshToken = await userService.setRefreshToken(user.id)
 
     // Return success response
     res.json({
       message: 'Login successful',
-      token,
+      token: accessToken,
+      refreshToken,
       user: {
         id: user.id,
         name: user.fields.Name,
         email: user.fields.Email,
         role: user.fields.Role,
+        isActive: user.fields.IsActive !== false,
+        isEmailVerified: user.fields.IsEmailVerified || false,
       },
     })
   } catch (error) {
@@ -215,6 +222,8 @@ export const getProfile = async (req, res) => {
         name: user.fields.Name,
         email: user.fields.Email,
         role: user.fields.Role,
+        isActive: user.fields.IsActive !== false, // Default to true
+        isEmailVerified: user.fields.IsEmailVerified || false,
         createdAt: user.fields.CreatedAt,
       },
     })
@@ -222,6 +231,108 @@ export const getProfile = async (req, res) => {
     console.error('Get profile error:', error)
     res.status(500).json({ 
       error: 'Failed to fetch profile',
+      message: error.message 
+    })
+  }
+}
+
+// Get all users (admin only)
+export const getAllUsers = async (req, res) => {
+  try {
+    console.log('[getAllUsers] Fetching users from Airtable...')
+    
+    const users = await userService.getAllUsers()
+    console.log(`[getAllUsers] Found ${users.length} users`)
+
+    const formattedUsers = users.map(user => {
+      const formatted = {
+        id: user.id,
+        name: user.fields.Name || 'Unknown',
+        email: user.fields.Email || 'N/A',
+        role: user.fields.Role || 'user',
+        isActive: user.fields.IsActive === true, // Only true if explicitly checked
+        isEmailVerified: user.fields.IsEmailVerified === true || user.fields.IsEmailVerified === 'true',
+        createdAt: user.fields.CreatedAt || user.createdTime || new Date().toISOString(),
+      }
+      console.log(`[getAllUsers] User: ${user.fields.Email}, IsActive: ${user.fields.IsActive} (${typeof user.fields.IsActive}), formatted.isActive: ${formatted.isActive}`)
+      return formatted
+    })
+
+    console.log(`[getAllUsers] Returning ${formattedUsers.length} formatted users`)
+
+    res.json({
+      users: formattedUsers,
+    })
+  } catch (error) {
+    console.error('[getAllUsers] Error:', error)
+    res.status(500).json({ 
+      error: 'Failed to fetch users',
+      message: error.message 
+    })
+  }
+}
+
+// Update user status (admin only)
+export const updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { isActive, role } = req.body
+
+    if (isActive === undefined && role === undefined) {
+      return res.status(400).json({ 
+        error: 'At least one field (isActive or role) must be provided' 
+      })
+    }
+
+    console.log('[updateUserStatus] Request body:', { id, isActive, role })
+
+    const updateFields = {}
+    if (isActive !== undefined) {
+      // Convert to boolean for Airtable checkbox field
+      updateFields.IsActive = isActive === true || isActive === 'true' ? true : false
+    }
+    if (role !== undefined) {
+      updateFields.Role = role
+    }
+
+    console.log('[updateUserStatus] Updating user with fields:', updateFields)
+
+    const updatedUser = await userService.updateUser(id, updateFields)
+
+    res.json({
+      message: 'User updated successfully',
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.fields.Name,
+        email: updatedUser.fields.Email,
+        role: updatedUser.fields.Role,
+        isActive: updatedUser.fields.IsActive,
+        isEmailVerified: updatedUser.fields.IsEmailVerified,
+      },
+    })
+  } catch (error) {
+    console.error('Update user status error:', error)
+    res.status(500).json({ 
+      error: 'Failed to update user',
+      message: error.message 
+    })
+  }
+}
+
+// Delete user (admin only)
+export const adminDeleteUser = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await userService.deleteUser(id)
+
+    res.json({ 
+      message: 'User deleted successfully' 
+    })
+  } catch (error) {
+    console.error('Admin delete user error:', error)
+    res.status(500).json({ 
+      error: 'Failed to delete user',
       message: error.message 
     })
   }
@@ -318,23 +429,21 @@ export const changePassword = async (req, res) => {
 // Logout with refresh token clearing
 export const logout = async (req, res) => {
   try {
-    const { refreshToken } = req.body
+    console.log('[logout] Logout request received')
+    console.log('[logout] req.user:', JSON.stringify(req.user, null, 2))
     
-    if (refreshToken) {
-      try {
-        // Decode refresh token to get user ID
-        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET)
-        // Clear refresh token from database
-        await userService.clearRefreshToken(decoded.userId)
-      } catch (error) {
-        // Token might be invalid/expired, but still proceed with logout
-        console.log('Refresh token already invalid or expired during logout')
-      }
+    // Clear refresh token from database using authenticated user ID
+    if (req.user && req.user.id) {
+      console.log(`[logout] Clearing refresh token for user: ${req.user.id}`)
+      await userService.clearRefreshToken(req.user.id)
+      console.log(`[logout] Successfully cleared refresh token for user: ${req.user.id}`)
+    } else {
+      console.log('[logout] No user ID found in request, cannot clear refresh token')
     }
 
     res.json({ message: 'Logout successful' })
   } catch (error) {
-    console.error('Logout error:', error)
+    console.error('[logout] Logout error:', error)
     res.status(500).json({ error: 'Logout failed' })
   }
 }
@@ -741,6 +850,9 @@ export default {
   deleteAccount,
   forgotPassword,
   resetPassword,
+  getAllUsers,
+  updateUserStatus,
+  adminDeleteUser,
   registerValidation,
   loginValidation,
   forgotPasswordValidation,

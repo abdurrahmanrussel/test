@@ -134,8 +134,8 @@ const LoginPage = () => {
         return
       }
 
-      // Login successful
-      login(data.token, data.user)
+      // Login successful - pass both access token and refresh token
+      login(data.token, data.user, data.refreshToken)
       setSuccessMessage('Login Successful')
       
       // Show success message for 1.5 seconds then navigate

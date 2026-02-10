@@ -6,6 +6,18 @@ dotenv.config()
 
 console.log('ENV:', process.env.AIRTABLE_BASE_ID, process.env.AIRTABLE_TABLE_NAME)
 
+// Normalize email (remove dots for Gmail, convert to lowercase)
+const normalizeEmail = (email) => {
+  if (!email) return email
+  const normalized = email.toLowerCase().trim()
+  // For Gmail, remove ALL dots in the local part (before @)
+  if (normalized.endsWith('@gmail.com')) {
+    const [localPart, domain] = normalized.split('@')
+    return localPart.replace(/\./g, '') + '@' + domain
+  }
+  return normalized
+}
+
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
@@ -14,8 +26,14 @@ import fetch from 'node-fetch'
 import https from 'https'
 import dns from 'dns'
 import authController from './controllers/authController.js'
+import ordersController from './controllers/ordersController.js'
+import productsController from './controllers/productsController.js'
+import promoCodesController from './controllers/promoCodesController.js'
+import { createOrder } from './services/airtableOrderService.js'
+import * as userService from './services/airtableUserService.js'
 import { authenticateToken, generateCSRFToken } from './middleware/auth.js'
-import { apiLimiter, authLimiter, passwordResetLimiter } from './middleware/rateLimiter.js'
+import { requireAdmin } from './middleware/admin.js'
+import { apiLimiter, authLimiter, passwordResetLimiter, passwordChangeLimiter, tokenRefreshLimiter } from './middleware/rateLimiter.js'
 
 dns.setDefaultResultOrder('ipv4first')
 
@@ -45,6 +63,105 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
     const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
     
     console.log('✅ Stripe Webhook received:', event.type, event.id)
+
+    // Handle checkout.session.completed event
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object
+      console.log('💰 Payment successful for session:', session.id)
+      console.log('📦 Session details:', JSON.stringify(session, null, 2))
+      
+      try {
+        // Extract order information
+        const productId = session.metadata?.productId
+        const productName = session.metadata?.productName
+        const userId = session.metadata?.userId // Get user ID from logged-in checkout
+        const amount = session.amount_total / 100 // Convert from cents
+        const stripePaymentId = session.payment_intent || session.payment_intent || session.id
+        
+        // Get contact info from Stripe checkout
+        const contactEmail = session.customer_details?.email
+        const cardHolderName = session.customer_details?.name || contactEmail?.split('@')[0] || 'Customer'
+        
+        console.log('📝 Stripe checkout data:', {
+          productId,
+          productName,
+          userId,
+          amount,
+          stripePaymentId,
+          contactEmail,
+          cardHolderName,
+        })
+
+        if (!productId || !productName || !amount) {
+          console.error('❌ Missing required order data:', { productId, productName, amount })
+          throw new Error('Missing required order data')
+        }
+
+        // Get user account details from userId (no email matching needed)
+        let userAccountEmail = ''
+        let userAccountName = ''
+        
+        console.log('🔍 Getting user account from userId:', userId)
+        
+        if (userId) {
+          try {
+            console.log('🔍 Calling userService.getUserById...')
+            const user = await userService.getUserById(userId)
+            console.log('🔍 User lookup result:', user ? 'FOUND' : 'NOT FOUND')
+            
+            if (user) {
+              userAccountEmail = user.fields.Email
+              userAccountName = user.fields.Name || ''
+              console.log('✅ Found user account:', {
+                id: userId,
+                email: userAccountEmail,
+                name: userAccountName
+              })
+            } else {
+              console.log('⚠️ No user account found for userId:', userId)
+              console.log('⚠️ Customer Email/Name will be empty')
+            }
+          } catch (err) {
+            console.log('⚠️ Error getting user:', err.message)
+          }
+        } else {
+          console.log('⚠️ No userId provided in session metadata')
+        }
+
+        // Customer Email and Name ONLY from user account (no fallback)
+        const finalCustomerEmail = userAccountEmail
+        const finalCustomerName = userAccountName
+
+        console.log('🔄 Creating order in Airtable with:', {
+          customerEmail: finalCustomerEmail,
+          customerName: finalCustomerName,
+          contactInfo: contactEmail,
+          cardHolder: cardHolderName,
+        })
+        
+        // Create order in Airtable
+        const order = await createOrder({
+          userId,
+          productId,
+          productName,
+          amount,
+          stripePaymentId,
+          status: 'completed',
+          customerEmail: finalCustomerEmail, // ONLY from user account
+          customerName: finalCustomerName, // ONLY from user account
+          contactInfo: contactEmail, // From Stripe checkout
+          cardHolder: cardHolderName, // From Stripe cardholder
+        })
+
+        console.log('✅ Order created in Airtable:', order.id)
+        console.log('📋 Order record:', JSON.stringify(order, null, 2))
+      } catch (orderError) {
+        console.error('❌ Failed to create order:', orderError)
+        console.error('❌ Error stack:', orderError.stack)
+        // Don't return error to Stripe - we've already received payment
+        // Just log it so you can manually create the order if needed
+      }
+    }
 
     // Optional: Forward to n8n
     if (process.env.N8N_WEBHOOK_URL) {
@@ -151,11 +268,12 @@ app.get('/api/products', async (req, res) => {
 // ===============================
 // CREATE STRIPE CHECKOUT
 // ===============================
-app.post('/api/create-checkout-session', async (req, res) => {
+app.post('/api/create-checkout-session', authenticateToken, async (req, res) => {
   try {
     console.log('🔥 Checkout hit:', req.body)
 
-    const { productId } = req.body
+    const { productId, promoCodeId, finalPrice } = req.body
+    const userId = req.user.id // Get logged-in user's ID
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -178,8 +296,11 @@ app.post('/api/create-checkout-session', async (req, res) => {
     }
 
     const record = data.records[0]
-    const price = record.fields.Price
+    const originalPrice = record.fields.Price
     const name = record.fields['Name / Title']
+
+    // Use finalPrice if provided (with promo), otherwise use original price
+    const price = finalPrice ? parseFloat(finalPrice) : originalPrice
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -196,7 +317,11 @@ app.post('/api/create-checkout-session', async (req, res) => {
       ],
       metadata: {
         productId,
-        productName: name
+        productName: name,
+        userId,
+        promoCodeId,
+        originalPrice,
+        finalPrice: price // Store the actual price being charged
       },
       success_url: `http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `http://localhost:5173/cancel?product_id=${productId}&product_name=${encodeURIComponent(name)}`,
@@ -265,11 +390,83 @@ app.post(
   authController.login
 )
 
-// Refresh token
-app.post('/api/auth/refresh', authController.refreshToken)
+// Refresh token (with rate limiting)
+app.post('/api/auth/refresh', tokenRefreshLimiter, authController.refreshToken)
 
-// Logout (clears refresh token)
-app.post('/api/auth/logout', authController.logout)
+// Logout (clears refresh token) - requires authentication
+app.post('/api/auth/logout', authenticateToken, authController.logout)
+
+// ===============================
+// ADMIN PRODUCT ROUTES
+// ===============================
+
+// Get all products (admin only)
+app.get('/api/admin/products', authenticateToken, requireAdmin, productsController.getAllProducts)
+
+// Create product (admin only)
+app.post(
+  '/api/admin/products',
+  authenticateToken,
+  requireAdmin,
+  productsController.productValidation,
+  productsController.createProduct
+)
+
+// Update product (admin only)
+app.patch(
+  '/api/admin/products/:id',
+  authenticateToken,
+  requireAdmin,
+  productsController.productValidation,
+  productsController.updateProduct
+)
+
+// Delete product (admin only)
+app.delete('/api/admin/products/:id', authenticateToken, requireAdmin, productsController.deleteProduct)
+
+// ===============================
+// ADMIN PROMO CODE ROUTES
+// ===============================
+
+// Get all promo codes (admin only)
+app.get('/api/admin/promo-codes', authenticateToken, requireAdmin, promoCodesController.getAllPromoCodes)
+
+// Create promo code (admin only)
+app.post(
+  '/api/admin/promo-codes',
+  authenticateToken,
+  requireAdmin,
+  promoCodesController.promoCodeValidation,
+  promoCodesController.createPromoCode
+)
+
+// Update promo code (admin only)
+app.patch(
+  '/api/admin/promo-codes/:id',
+  authenticateToken,
+  requireAdmin,
+  promoCodesController.promoCodeValidation,
+  promoCodesController.updatePromoCode
+)
+
+// Delete promo code (admin only)
+app.delete('/api/admin/promo-codes/:id', authenticateToken, requireAdmin, promoCodesController.deletePromoCode)
+
+// Validate promo code (public - for users to check if promo code is valid)
+app.post('/api/promo-codes/validate', promoCodesController.validatePromoCode)
+
+// ===============================
+// ADMIN USER MANAGEMENT ROUTES
+// ===============================
+
+// Get all users (admin only)
+app.get('/api/admin/users', authenticateToken, requireAdmin, authController.getAllUsers)
+
+// Update user status/role (admin only)
+app.patch('/api/admin/users/:id', authenticateToken, requireAdmin, authController.updateUserStatus)
+
+// Delete user (admin only)
+app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, authController.adminDeleteUser)
 
 // Email verification
 app.post('/api/auth/verify-email', authController.verifyEmail)
@@ -287,8 +484,8 @@ app.get('/api/auth/me', authenticateToken, authController.getProfile)
 // Update profile
 app.put('/api/auth/profile', authenticateToken, authController.updateProfile)
 
-// Change password
-app.post('/api/auth/change-password', authenticateToken, authController.changePassword)
+// Change password (with rate limiting)
+app.post('/api/auth/change-password', authenticateToken, passwordChangeLimiter, authController.changePassword)
 
 // Forgot password (with strict rate limiting)
 app.post(
@@ -305,6 +502,22 @@ app.post(
   authController.resetPasswordValidation,
   authController.resetPassword
 )
+
+// ===============================
+// ORDERS ROUTES
+// ===============================
+
+// Get all orders (admin only)
+app.get('/api/orders', authenticateToken, ordersController.getAllOrders)
+
+// Get current user's orders
+app.get('/api/orders/my-orders', authenticateToken, ordersController.getUserOrders)
+
+// Get order statistics (admin only)
+app.get('/api/orders/stats', authenticateToken, ordersController.getOrderStats)
+
+// Update order status (admin only)
+app.patch('/api/orders/:orderId/status', authenticateToken, ordersController.updateOrderStatus)
 
 // ===============================
 // START SERVER

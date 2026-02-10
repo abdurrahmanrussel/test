@@ -58,7 +58,7 @@ const airtableFetch = async (endpoint, options = {}) => {
 // Find user by email
 export const findUserByEmail = async (email) => {
   try {
-    const url = `${USERS_TABLE_ID}?filterByFormula={Email}="${email}"`
+    const url = `${encodeURIComponent(USERS_TABLE_ID)}?filterByFormula={Email}="${email}"`
     console.log('Fetching user from:', url)
     
     const response = await airtableFetch(url)
@@ -103,7 +103,7 @@ export const createUser = async (userData) => {
 
     console.log('Creating user with data:', JSON.stringify(requestBody, null, 2))
 
-    const response = await airtableFetch(USERS_TABLE_ID, {
+    const response = await airtableFetch(encodeURIComponent(USERS_TABLE_ID), {
       method: 'POST',
       body: JSON.stringify(requestBody),
     })
@@ -126,7 +126,7 @@ export const createUser = async (userData) => {
 // Update user by ID
 export const updateUser = async (userId, fields) => {
   try {
-    const response = await airtableFetch(`${USERS_TABLE_ID}/${userId}`, {
+    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify({
         fields,
@@ -162,7 +162,7 @@ export const setResetToken = async (userId) => {
 // Verify and clear reset token
 export const verifyResetToken = async (userId, token) => {
   try {
-    const response = await airtableFetch(`${USERS_TABLE_ID}/${userId}`)
+    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`)
     
     if (!response.ok) {
       throw new Error('Failed to fetch user')
@@ -196,7 +196,7 @@ export const verifyResetToken = async (userId, token) => {
 // Get user by ID
 export const getUserById = async (userId) => {
   try {
-    const response = await airtableFetch(`${USERS_TABLE_ID}/${userId}`)
+    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`)
     
     if (!response.ok) {
       throw new Error('Failed to fetch user')
@@ -226,7 +226,7 @@ export const setRefreshToken = async (userId) => {
 // Verify refresh token
 export const verifyRefreshToken = async (userId, token) => {
   try {
-    const response = await airtableFetch(`${USERS_TABLE_ID}/${userId}`)
+    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`)
     
     if (!response.ok) {
       throw new Error('Failed to fetch user')
@@ -253,10 +253,20 @@ export const verifyRefreshToken = async (userId, token) => {
 
 // Clear refresh token (logout/invalidate sessions)
 export const clearRefreshToken = async (userId) => {
-  await updateUser(userId, {
-    RefreshToken: null,
-    RefreshTokenExpiry: null,
-  })
+  console.log(`[clearRefreshToken] Attempting to clear refresh token for user: ${userId}`)
+  
+  try {
+    const result = await updateUser(userId, {
+      RefreshToken: null,
+      RefreshTokenExpiry: null,
+    })
+    console.log(`[clearRefreshToken] Successfully cleared refresh token for user: ${userId}`)
+    console.log(`[clearRefreshToken] Result:`, JSON.stringify(result, null, 2))
+    return result
+  } catch (error) {
+    console.error(`[clearRefreshToken] Error clearing refresh token for user ${userId}:`, error)
+    throw error
+  }
 }
 
 // Generate email verification token
@@ -281,7 +291,7 @@ export const verifyEmail = async (userId) => {
 // Delete user account
 export const deleteUser = async (userId) => {
   try {
-    const response = await airtableFetch(`${USERS_TABLE_ID}/${userId}`, {
+    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`, {
       method: 'DELETE',
     })
 
@@ -293,6 +303,26 @@ export const deleteUser = async (userId) => {
     return true
   } catch (error) {
     console.error('Error deleting user:', error)
+    throw error
+  }
+}
+
+// Get all users
+export const getAllUsers = async () => {
+  try {
+    const url = encodeURIComponent(USERS_TABLE_ID)
+    const response = await airtableFetch(url)
+    
+    if (!response.ok) {
+      const error = await response.json()
+      console.error('Airtable API error:', JSON.stringify(error, null, 2))
+      throw new Error(error.error?.message || 'Failed to fetch users')
+    }
+
+    const data = await response.json()
+    return data.records || []
+  } catch (error) {
+    console.error('Error fetching all users:', error)
     throw error
   }
 }
@@ -310,4 +340,5 @@ export default {
   setEmailVerificationToken,
   verifyEmail,
   deleteUser,
+  getAllUsers,
 }

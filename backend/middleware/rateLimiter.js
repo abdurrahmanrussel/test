@@ -27,8 +27,28 @@ export const passwordResetLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// Rate limiter for password change (authenticated users)
+export const passwordChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // Limit to 3 password changes per 15 minutes
+  message: 'You have changed your password too many times recently. Please wait 15 minutes before trying again.',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Rate limiter for token refresh (prevents abuse)
+export const tokenRefreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit to 30 refresh requests per 15 minutes (2 per minute)
+  message: 'Too many refresh attempts. Please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 export default {
   apiLimiter,
   authLimiter,
   passwordResetLimiter,
+  passwordChangeLimiter,
+  tokenRefreshLimiter,
 }
