@@ -1,5 +1,5 @@
 // ===============================
-// Load environment variables first
+// Load environment variables FIRST before any imports
 // ===============================
 import dotenv from 'dotenv'
 import path from 'path'
@@ -25,6 +25,7 @@ const normalizeEmail = (email) => {
   return normalized
 }
 
+// NOW import everything else (after env vars are loaded)
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
