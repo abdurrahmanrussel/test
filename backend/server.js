@@ -2,7 +2,7 @@
 // Load environment variables first
 // ===============================
 import dotenv from 'dotenv'
-dotenv.config()
+dotenv.config({ path: "/home/ubuntu/my-react-app/backend/.env" })
 
 console.log('ENV:', process.env.AIRTABLE_BASE_ID, process.env.AIRTABLE_TABLE_NAME)
 
@@ -39,6 +39,9 @@ dns.setDefaultResultOrder('ipv4first')
 
 const app = express()
 
+// Trust proxy - needed for nginx reverse proxy
+app.set('trust proxy', 1)
+
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
   keepAlive: true,
@@ -47,7 +50,7 @@ const httpsAgent = new https.Agent({
 })
 
 app.use(cors({ 
-  origin: 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true, // Allow cookies
 }))
 
@@ -321,10 +324,10 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
         userId,
         promoCodeId,
         originalPrice,
-        finalPrice: price // Store the actual price being charged
+        finalPrice: price // Store: actual price being charged
       },
-      success_url: `http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `http://localhost:5173/cancel?product_id=${productId}&product_name=${encodeURIComponent(name)}`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/cancel?product_id=${productId}&product_name=${encodeURIComponent(name)}`,
     })
 
     res.json({ url: session.url })
@@ -520,6 +523,18 @@ app.get('/api/orders/stats', authenticateToken, ordersController.getOrderStats)
 app.patch('/api/orders/:orderId/status', authenticateToken, ordersController.updateOrderStatus)
 
 // ===============================
+// HEALTH CHECK
+// ===============================
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    cors: process.env.FRONTEND_URL || 'http://localhost:5173'
+  })
+})
+
+// ===============================
 // START SERVER
 // ===============================
 app.listen(4242, () => {
@@ -527,4 +542,6 @@ app.listen(4242, () => {
   console.log('📍 Webhook endpoint: http://localhost:4242/api/stripe-webhook')
   console.log('🔐 Auth endpoints: /api/auth/*')
   console.log('🛡️ Security features: Rate limiting, CSRF protection, Refresh tokens enabled')
+  console.log('🌍 CORS origin:', process.env.FRONTEND_URL || 'http://localhost:5173')
+  console.log('🏥 Health check: http://localhost:4242/health')
 })

@@ -1,0 +1,171 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  NODE_VERSION: '20.x'
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_USER: ubuntu
+  DEPLOY_PATH: /home/ubuntu/my-react-app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+        env:
+          VITE_API_URL: ${{ secrets.PROD_API_URL }}
+          VITE_STRIPE_PUBLIC_KEY: ${{ secrets.PROD_STRIPE_PUBLIC_KEY }}
+          VITE_N8N_WEBHOOK_URL: ${{ secrets.PROD_N8N_WEBHOOK_URL }}
+
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Create .env.production for Frontend
+        run: |
+          cd frontend
+          cat > .env.production << EOF
+          VITE_API_URL=${{ secrets.PROD_API_URL }}
+          VITE_STRIPE_PUBLIC_KEY=${{ secrets.PROD_STRIPE_PUBLIC_KEY }}
+          VITE_N8N_WEBHOOK_URL=${{ secrets.PROD_N8N_WEBHOOK_URL }}
+          VITE_APP_URL=${{ secrets.PROD_APP_URL }}
+          VITE_APP_NAME=My React App
+          VITE_AIRTABLE_BASE_ID=appfm19v1p5FXUzri
+          VITE_AIRTABLE_TABLE_NAME=Products Info
+          VITE_AIRTABLE_PAT=${{ secrets.VITE_AIRTABLE_PAT }}
+          VITE_GROQ_API_KEY=${{ secrets.VITE_GROQ_API_KEY }}
+          EOF
+
+      - name: Create .env.production for Backend
+        run: |
+          cd backend
+          cat > .env.production << EOF
+          PORT=4242
+          NODE_ENV=production
+          FRONTEND_URL=${{ secrets.PROD_APP_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN=7d
+          JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
+          AIRTABLE_API_KEY=${{ secrets.AIRTABLE_API_KEY }}
+          AIRTABLE_PAT=${{ secrets.AIRTABLE_PAT }}
+          AIRTABLE_BASE_ID=appfm19v1p5FXUzri
+          AIRTABLE_TABLE_NAME=Products Info
+          AIRTABLE_USERS_TABLE_ID=tblAWWFgbeeLyLMNb
+          AIRTABLE_ORDERS_TABLE_ID=tblP1NkNZn7PB8cwO
+          STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          EMAIL_HOST=smtp.gmail.com
+          EMAIL_PORT=587
+          EMAIL_USER=abdurrahmanrussel77@gmail.com
+          EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_FROM=abdurrahmanrussel77@gmail.com
+          N8N_WEBHOOK_URL=${{ secrets.PROD_N8N_WEBHOOK_URL }}
+          RATE_LIMIT_WINDOW_MS=900000
+          RATE_LIMIT_MAX_REQUESTS=100
+          EOF
+
+      - name: Create logs directory
+        run: mkdir -p logs
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key.pem
+          chmod 600 ~/.ssh/ec2_key.pem
+          echo "Host ${{ secrets.EC2_HOST }}" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+
+      - name: Deploy to EC2
+        run: |
+          # Sync files to EC2 (rsync will create directories)
+          rsync -avz --progress \
+            -e "ssh -i ~/.ssh/ec2_key.pem" \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.env.local' \
+            --exclude 'logs' \
+            --exclude '.env' \
+            ./ \
+            ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.DEPLOY_PATH }}/
+
+      - name: Install Node.js on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"
+
+      - name: Install Backend Dependencies on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ${{ env.DEPLOY_PATH }}/backend && npm ci --production"
+
+      - name: Install PM2 on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo npm install -g pm2"
+
+      - name: Install Nginx on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo apt-get update && sudo apt-get install -y nginx"
+
+      - name: Configure Nginx
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo cp ${{ env.DEPLOY_PATH }}/nginx.conf /etc/nginx/sites-available/my-react-app && sudo ln -sf /etc/nginx/sites-available/my-react-app /etc/nginx/sites-enabled/ && sudo rm -f /etc/nginx/sites-enabled/default && sudo nginx -t"
+
+      - name: Restart Nginx
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo systemctl restart nginx"
+
+      - name: Setup Environment Files on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ${{ env.DEPLOY_PATH }} && mkdir -p logs && cp backend/.env.production backend/.env"
+
+      - name: Deploy Frontend to Nginx
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo rm -rf /var/www/html/* && sudo cp -r ${{ env.DEPLOY_PATH }}/frontend/dist/* /var/www/html/ && sudo chown -R www-data:www-data /var/www/html && sudo chmod -R 755 /var/www/html"
+
+      - name: Restart PM2 Services
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ${{ env.DEPLOY_PATH }} && if pm2 list | grep -q backend; then pm2 reload backend --update-env; else pm2 start ecosystem.config.cjs --only backend --env production; fi && pm2 save"
+
+      - name: Verify Deployment
+        run: |
+          sleep 10
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "curl -f http://localhost:4242/health || exit 1"
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "pm2 list"
+
+      - name: Cleanup SSH Key
+        if: always()
+        run: rm -f ~/.ssh/ec2_key.pem
+
+      - name: Notify Success
+        if: success()
+        run: echo "Deployment successful! 🚀"
+
+      - name: Notify Failure
+        if: failure()
+        run: echo "Deployment failed! ❌ Check to logs above for details."

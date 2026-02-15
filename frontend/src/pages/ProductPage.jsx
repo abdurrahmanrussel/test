@@ -75,20 +75,22 @@ export default function ProductPage() {
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const res = await fetch(
-          `https://api.airtable.com/v0/${import.meta.env.VITE_AIRTABLE_BASE_ID}/${encodeURIComponent(
-            import.meta.env.VITE_AIRTABLE_TABLE_NAME
-          )}/${id}`,
-          {
-            headers: { Authorization: `Bearer ${import.meta.env.VITE_AIRTABLE_PAT}` },
-          }
-        )
+        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
+        const res = await fetch(`${backendUrl}/api/products`)
         const data = await res.json()
 
+        // Find the specific product by ID
+        const productData = data.records.find(r => r.id === id)
+
+        if (!productData) {
+          console.error('Product not found:', id)
+          return
+        }
+
         let dynamicFaq = []
-        if (data.fields.FAQ) {
+        if (productData.fields.FAQ) {
           try {
-            const parsed = JSON.parse(data.fields.FAQ)
+            const parsed = JSON.parse(productData.fields.FAQ)
             if (Array.isArray(parsed)) {
               parsed.forEach(item => {
                 if (Array.isArray(item) && item.length === 2) {
@@ -102,25 +104,25 @@ export default function ProductPage() {
         }
 
         setProduct({
-          id: data.id,
-          name: data.fields['Name / Title'],
-          type: data.fields.Type,
-          price: data.fields.Price,
-          description: data.fields.Description,
-          image: data.fields['Thumbnail URL'],
-          gallery: data.fields['Gallery Images']
-  ? typeof data.fields['Gallery Images'] === 'string'
-    ? data.fields['Gallery Images'].split(',').map(url => url.trim())
-    : Array.isArray(data.fields['Gallery Images'])
-    ? data.fields['Gallery Images']
+          id: productData.id,
+          name: productData.fields['Name / Title'],
+          type: productData.fields.Type,
+          price: productData.fields.Price,
+          description: productData.fields.Description,
+          image: productData.fields['Thumbnail URL'],
+          gallery: productData.fields['Gallery Images']
+  ? typeof productData.fields['Gallery Images'] === 'string'
+    ? productData.fields['Gallery Images'].split(',').map(url => url.trim())
+    : Array.isArray(productData.fields['Gallery Images'])
+    ? productData.fields['Gallery Images']
     : []
   : [],
 
-          youtube: data.fields['Youtube Link'] || null,
+          youtube: productData.fields['Youtube Link'] || null,
           faq: [...dynamicFaq, ...commonFaq],
         })
       } catch (err) {
-        console.error('Airtable fetch error:', err)
+        console.error('Product fetch error:', err)
       }
     }
     fetchProduct()

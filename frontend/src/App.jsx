@@ -30,20 +30,12 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
-  // Fetch Airtable products
+  // Fetch products from backend API
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(
-          `https://api.airtable.com/v0/${import.meta.env.VITE_AIRTABLE_BASE_ID}/${encodeURIComponent(
-            import.meta.env.VITE_AIRTABLE_TABLE_NAME
-          )}`,
-          {
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_AIRTABLE_PAT}`,
-            },
-          }
-        )
+        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
+        const res = await fetch(`${backendUrl}/api/products`)
 
         const data = await res.json()
 
@@ -65,7 +57,7 @@ function App() {
         setIndicators(activeProducts.filter((p) => p.type === 'Indicator'))
         setStrategies(activeProducts.filter((p) => p.type === 'Strategy'))
       } catch (err) {
-        console.error('Airtable fetch error:', err)
+        console.error('Products fetch error:', err)
       }
     }
 

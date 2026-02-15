@@ -10,16 +10,8 @@ const HeroCarousel = () => {
   useEffect(() => {
     const fetchHeroProducts = async () => {
       try {
-        const res = await fetch(
-          `https://api.airtable.com/v0/${import.meta.env.VITE_AIRTABLE_BASE_ID}/${encodeURIComponent(
-            import.meta.env.VITE_AIRTABLE_TABLE_NAME
-          )}`,
-          {
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_AIRTABLE_PAT}`,
-            },
-          }
-        )
+        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
+        const res = await fetch(`${backendUrl}/api/products`)
 
         const data = await res.json()
 
@@ -33,7 +25,7 @@ const HeroCarousel = () => {
 
         setSlides(formattedSlides)
       } catch (err) {
-        console.error('HeroCarousel Airtable error:', err)
+        console.error('HeroCarousel fetch error:', err)
       }
     }
 
