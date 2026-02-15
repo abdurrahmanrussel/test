@@ -3,16 +3,16 @@ import nodemailer from 'nodemailer'
 
 dotenv.config()
 
-const GMAIL_EMAIL = process.env.GMAIL_EMAIL
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5173'
+const EMAIL_USER = process.env.EMAIL_USER
+const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD
+const BASE_URL = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:5173'
 
 // Create email transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: GMAIL_EMAIL,
-    pass: GMAIL_APP_PASSWORD,
+    user: EMAIL_USER,
+    pass: EMAIL_PASSWORD,
   },
 })
 
@@ -22,7 +22,7 @@ export const sendPasswordResetEmail = async (email, resetToken) => {
     const resetUrl = `${BASE_URL}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
 
     const mailOptions = {
-      from: GMAIL_EMAIL,
+      from: process.env.EMAIL_FROM || EMAIL_USER,
       to: email,
       subject: 'Password Reset Request',
       html: `
@@ -80,7 +80,7 @@ export const sendVerificationEmail = async (email, verificationToken, name) => {
     const verifyUrl = `${BASE_URL}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`
 
     const mailOptions = {
-      from: GMAIL_EMAIL,
+      from: process.env.EMAIL_FROM || EMAIL_USER,
       to: email,
       subject: 'Verify Your Email Address',
       html: `
