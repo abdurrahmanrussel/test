@@ -8,8 +8,13 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Load .env from backend directory
-dotenv.config({ path: path.join(__dirname, '.env') })
+// Load .env.local for development, .env for production
+const envPath = process.env.NODE_ENV === 'production'
+  ? path.join(__dirname, '.env')
+  : path.join(__dirname, '.env.local')
+dotenv.config({ path: envPath })
+
+console.log(`[Server] Loading environment from: ${envPath}`)
 
 console.log('ENV:', process.env.AIRTABLE_BASE_ID, process.env.AIRTABLE_TABLE_NAME)
 
