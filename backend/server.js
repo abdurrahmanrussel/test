@@ -2,7 +2,7 @@
 // Load environment variables first
 // ===============================
 import dotenv from 'dotenv'
-dotenv.config({ path: "/home/ubuntu/my-react-app/backend/.env" })
+dotenv.config()
 
 console.log('ENV:', process.env.AIRTABLE_BASE_ID, process.env.AIRTABLE_TABLE_NAME)
 

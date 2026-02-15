@@ -15,7 +15,10 @@ const HeroCarousel = () => {
 
         const data = await res.json()
 
-        const formattedSlides = data.records
+        // Handle both array and object with records property
+        const records = Array.isArray(data) ? data : data.records
+
+        const formattedSlides = records
           .slice(2, 5) // ONLY 3 slides
           .map((r) => ({
             image: r.fields['Thumbnail URL'],

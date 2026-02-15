@@ -79,8 +79,11 @@ export default function ProductPage() {
         const res = await fetch(`${backendUrl}/api/products`)
         const data = await res.json()
 
+        // Handle both array and object with records property
+        const records = Array.isArray(data) ? data : data.records
+
         // Find the specific product by ID
-        const productData = data.records.find(r => r.id === id)
+        const productData = records.find(r => r.id === id)
 
         if (!productData) {
           console.error('Product not found:', id)

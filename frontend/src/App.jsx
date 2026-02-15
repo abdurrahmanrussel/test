@@ -39,7 +39,10 @@ function App() {
 
         const data = await res.json()
 
-        const formatted = data.records.map((r) => ({
+        // Handle both array and object with records property
+        const records = Array.isArray(data) ? data : data.records
+
+        const formatted = records.map((r) => ({
           id: r.id,
           name: r.fields['Name / Title'],
           type: r.fields.Type,
