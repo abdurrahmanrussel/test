@@ -70,11 +70,10 @@ jobs:
           PORT=4242
           NODE_ENV=production
           FRONTEND_URL=${{ secrets.PROD_APP_URL }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_SECRET=aa-trading-super-secret-jwt-key-2024-change-in-production-12345678
           JWT_EXPIRES_IN=7d
-          JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
-          AIRTABLE_API_KEY=${{ secrets.AIRTABLE_API_KEY }}
-          AIRTABLE_PAT=${{ secrets.AIRTABLE_PAT }}
+          JWT_REFRESH_SECRET=aa-trading-refresh-token-secret-2024-change-in-production-87654321
+          AIRTABLE_PAT=${{ secrets.VITE_AIRTABLE_PAT }}
           AIRTABLE_BASE_ID=appfm19v1p5FXUzri
           AIRTABLE_TABLE_NAME=Products Info
           AIRTABLE_USERS_TABLE_ID=tblAWWFgbeeLyLMNb
