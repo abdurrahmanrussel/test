@@ -1,16 +1,3 @@
-import dotenv from 'dotenv'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Load .env.local for development, .env for production
-const envPath = process.env.NODE_ENV === 'production' 
-  ? path.join(__dirname, '../.env') 
-  : path.join(__dirname, '../.env.local')
-dotenv.config({ path: envPath })
-
 import fetch from 'node-fetch'
 import dns from 'dns'
 import https from 'https'
@@ -24,27 +11,20 @@ const httpsAgent = new https.Agent({
   family: 4,
 })
 
-const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
-const AIRTABLE_PAT = process.env.AIRTABLE_PAT
-const PROMO_CODES_TABLE_ID = 'Promo Codes'
-
-console.log('=== AIRTABLE PROMO CODE SERVICE INIT ===')
-console.log('AIRTABLE_BASE_ID:', AIRTABLE_BASE_ID)
-console.log('PROMO_CODES_TABLE_ID:', PROMO_CODES_TABLE_ID)
-console.log('========================================')
-
 // Helper function to make Airtable API calls
 const airtableFetch = async (endpoint, options = {}) => {
+  const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+  const AIRTABLE_PAT = process.env.AIRTABLE_PAT
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 15000)
 
   try {
     const response = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${endpoint}`,
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${endpoint}`,
       {
         ...options,
         headers: {
-          Authorization: `Bearer ${AIRTABLE_PAT}`,
+          Authorization: `Bearer ${process.env.AIRTABLE_PAT}`,
           'Content-Type': 'application/json',
           ...options.headers,
         },
@@ -65,6 +45,7 @@ const airtableFetch = async (endpoint, options = {}) => {
 
 // Get all promo codes
 export const getAllPromoCodes = async () => {
+  const PROMO_CODES_TABLE_ID = 'Promo Codes'
   try {
     console.log(`[getAllPromoCodes] Fetching from table: ${PROMO_CODES_TABLE_ID}`)
     const url = encodeURIComponent(PROMO_CODES_TABLE_ID)
@@ -87,6 +68,7 @@ export const getAllPromoCodes = async () => {
 
 // Get promo code by ID
 export const getPromoCodeById = async (promoCodeId) => {
+  const PROMO_CODES_TABLE_ID = 'Promo Codes'
   try {
     const response = await airtableFetch(`${encodeURIComponent(PROMO_CODES_TABLE_ID)}/${promoCodeId}`)
     
@@ -104,6 +86,7 @@ export const getPromoCodeById = async (promoCodeId) => {
 
 // Create new promo code
 export const createPromoCode = async (promoCodeData) => {
+  const PROMO_CODES_TABLE_ID = 'Promo Codes'
   try {
     const { 
       promoCode, 
@@ -166,6 +149,7 @@ export const createPromoCode = async (promoCodeData) => {
 
 // Update promo code
 export const updatePromoCode = async (promoCodeId, promoCodeData) => {
+  const PROMO_CODES_TABLE_ID = 'Promo Codes'
   try {
     const fields = {}
 
@@ -218,6 +202,7 @@ export const updatePromoCode = async (promoCodeId, promoCodeData) => {
 
 // Delete promo code
 export const deletePromoCode = async (promoCodeId) => {
+  const PROMO_CODES_TABLE_ID = 'Promo Codes'
   try {
     const response = await airtableFetch(`${encodeURIComponent(PROMO_CODES_TABLE_ID)}/${promoCodeId}`, {
       method: 'DELETE',

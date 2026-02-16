@@ -1,16 +1,4 @@
-import dotenv from 'dotenv'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import nodemailer from 'nodemailer'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Load .env.local for development, .env for production
-const envPath = process.env.NODE_ENV === 'production' 
-  ? path.join(__dirname, '../.env') 
-  : path.join(__dirname, '../.env.local')
-dotenv.config({ path: envPath })
 
 const EMAIL_USER = process.env.EMAIL_USER
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD

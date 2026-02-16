@@ -1,16 +1,3 @@
-import dotenv from 'dotenv'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Load .env.local for development, .env for production
-const envPath = process.env.NODE_ENV === 'production' 
-  ? path.join(__dirname, '../.env') 
-  : path.join(__dirname, '../.env.local')
-dotenv.config({ path: envPath })
-
 import fetch from 'node-fetch'
 import dns from 'dns'
 import https from 'https'
@@ -24,22 +11,20 @@ const httpsAgent = new https.Agent({
   family: 4,
 })
 
-const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
-const AIRTABLE_PAT = process.env.AIRTABLE_PAT
-const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID
-
 // Helper function to make Airtable API calls
 const airtableFetch = async (endpoint, options = {}) => {
+  const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+  const AIRTABLE_PAT = process.env.AIRTABLE_PAT
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 15000)
 
   try {
     const response = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${endpoint}`,
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${endpoint}`,
       {
         ...options,
         headers: {
-          Authorization: `Bearer ${AIRTABLE_PAT}`,
+          Authorization: `Bearer ${process.env.AIRTABLE_PAT}`,
           'Content-Type': 'application/json',
           ...options.headers,
         },
@@ -60,6 +45,7 @@ const airtableFetch = async (endpoint, options = {}) => {
 
 // Get all orders
 export const getAllOrders = async () => {
+  const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID
   try {
     const url = encodeURIComponent(ORDERS_TABLE_ID)
     const response = await airtableFetch(url)
@@ -90,6 +76,7 @@ const normalizeEmail = (email) => {
 
 // Get orders by user email
 export const getOrdersByUserId = async (userEmail) => {
+  const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID
   try {
     const normalizedEmail = normalizeEmail(userEmail)
     console.log('[getOrdersByUserId] Searching for orders with normalized email:', normalizedEmail)
@@ -133,6 +120,7 @@ export const getOrdersByUserId = async (userEmail) => {
 
 // Create new order
 export const createOrder = async (orderData) => {
+  const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID
   try {
     const { userId, productId, productName, amount, stripePaymentId, status = 'completed', customerEmail, customerName, contactInfo, cardHolder } = orderData
 
@@ -215,6 +203,7 @@ export const createOrder = async (orderData) => {
 
 // Update order status
 export const updateOrderStatus = async (orderId, status) => {
+  const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID
   try {
     const response = await airtableFetch(`${encodeURIComponent(ORDERS_TABLE_ID)}/${orderId}`, {
       method: 'PATCH',

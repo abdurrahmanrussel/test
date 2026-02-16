@@ -1,16 +1,3 @@
-import dotenv from 'dotenv'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Load .env.local for development, .env for production
-const envPath = process.env.NODE_ENV === 'production' 
-  ? path.join(__dirname, '../.env') 
-  : path.join(__dirname, '../.env.local')
-dotenv.config({ path: envPath })
-
 import fetch from 'node-fetch'
 import dns from 'dns'
 import https from 'https'
@@ -25,28 +12,20 @@ const httpsAgent = new https.Agent({
   family: 4,
 })
 
-const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
-const AIRTABLE_PAT = process.env.AIRTABLE_PAT
-const USERS_TABLE_ID = process.env.AIRTABLE_USERS_TABLE_ID
-
-console.log('=== AIRTABLE SERVICE INIT ===')
-console.log('AIRTABLE_BASE_ID:', AIRTABLE_BASE_ID)
-console.log('AIRTABLE_PAT:', AIRTABLE_PAT ? '*** (exists)' : 'MISSING')
-console.log('AIRTABLE_USERS_TABLE_ID:', USERS_TABLE_ID)
-console.log('================================')
-
 // Helper function to make Airtable API calls
 const airtableFetch = async (endpoint, options = {}) => {
+  const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+  const AIRTABLE_PAT = process.env.AIRTABLE_PAT
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 15000)
 
   try {
     const response = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${endpoint}`,
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${endpoint}`,
       {
         ...options,
         headers: {
-          Authorization: `Bearer ${AIRTABLE_PAT}`,
+          Authorization: `Bearer ${process.env.AIRTABLE_PAT}`,
           'Content-Type': 'application/json',
           ...options.headers,
         },
@@ -68,7 +47,7 @@ const airtableFetch = async (endpoint, options = {}) => {
 // Find user by email
 export const findUserByEmail = async (email) => {
   try {
-    const url = `${encodeURIComponent(USERS_TABLE_ID)}?filterByFormula={Email}="${email}"`
+    const url = `${encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)}?filterByFormula={Email}="${email}"`
     console.log('Fetching user from:', url)
     
     const response = await airtableFetch(url)
@@ -94,6 +73,7 @@ export const findUserByEmail = async (email) => {
 
 // Create new user
 export const createUser = async (userData) => {
+  const USERS_TABLE_ID = process.env.AIRTABLE_USERS_TABLE_ID
   try {
     const { name, email, password, role = 'user' } = userData
 
@@ -136,7 +116,7 @@ export const createUser = async (userData) => {
 // Update user by ID
 export const updateUser = async (userId, fields) => {
   try {
-    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`, {
+    const response = await airtableFetch(`${encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)}/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify({
         fields,
@@ -172,7 +152,7 @@ export const setResetToken = async (userId) => {
 // Verify and clear reset token
 export const verifyResetToken = async (userId, token) => {
   try {
-    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`)
+    const response = await airtableFetch(`${encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)}/${userId}`)
     
     if (!response.ok) {
       throw new Error('Failed to fetch user')
@@ -206,7 +186,7 @@ export const verifyResetToken = async (userId, token) => {
 // Get user by ID
 export const getUserById = async (userId) => {
   try {
-    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`)
+    const response = await airtableFetch(`${encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)}/${userId}`)
     
     if (!response.ok) {
       throw new Error('Failed to fetch user')
@@ -236,7 +216,7 @@ export const setRefreshToken = async (userId) => {
 // Verify refresh token
 export const verifyRefreshToken = async (userId, token) => {
   try {
-    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`)
+    const response = await airtableFetch(`${encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)}/${userId}`)
     
     if (!response.ok) {
       throw new Error('Failed to fetch user')
@@ -301,7 +281,7 @@ export const verifyEmail = async (userId) => {
 // Delete user account
 export const deleteUser = async (userId) => {
   try {
-    const response = await airtableFetch(`${encodeURIComponent(USERS_TABLE_ID)}/${userId}`, {
+    const response = await airtableFetch(`${encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)}/${userId}`, {
       method: 'DELETE',
     })
 
@@ -320,7 +300,7 @@ export const deleteUser = async (userId) => {
 // Get all users
 export const getAllUsers = async () => {
   try {
-    const url = encodeURIComponent(USERS_TABLE_ID)
+    const url = encodeURIComponent(process.env.AIRTABLE_USERS_TABLE_ID)
     const response = await airtableFetch(url)
     
     if (!response.ok) {
