@@ -316,4 +316,4 @@ Everything is configured with your existing credentials. You just need to:
 3. Add GitHub Secrets
 4. Push to main → Auto-deploy!
 
-For detailed instructions, see `EC2_DEPLOYMENT_GUIDE.md`
+For detailed instructions, see `EC2_DEPLOYMENT_GUIDE.md`# Deployment triggered Mon Feb 16 11:15:51 AM +06 2026
