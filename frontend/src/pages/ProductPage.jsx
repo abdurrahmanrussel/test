@@ -16,8 +16,12 @@ export default function ProductPage() {
   const [finalPrice, setFinalPrice] = useState(null)
   const [faqOpenIndex, setFaqOpenIndex] = useState(null)
   const [showFixedBuy, setShowFixedBuy] = useState(false)
+  const [showPromoInput, setShowPromoInput] = useState(false)
+  const [promoInputValue, setPromoInputValue] = useState('')
+  const [promoError, setPromoError] = useState('')
 
   const topBuyRef = useRef(null)
+  const footerRef = useRef(null)
 
   // Check for promo code from navigation state
   useEffect(() => {
@@ -26,6 +30,60 @@ export default function ProductPage() {
       setFinalPrice(location.state.finalPrice)
     }
   }, [location])
+
+  // Validate promo code
+  const validatePromoCode = async () => {
+    if (!promoInputValue || promoInputValue.trim() === '') {
+      setPromoError('Please enter a promo code')
+      return
+    }
+
+    try {
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
+      const res = await fetch(`${backendUrl}/api/promo-codes/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          promoCode: promoInputValue.trim(), 
+          productId: id 
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.valid) {
+        setPromoError(data.message || 'Invalid promo code')
+        setPromoCode(null)
+        setFinalPrice(null)
+      } else {
+        setPromoError('')
+        setPromoCode(data.promoCode.code)
+        
+        // Calculate final price
+        const priceNum = parseFloat(product.price)
+        let discount = 0
+        if (data.promoCode.discountType === 'Percentage') {
+          discount = priceNum * (parseFloat(data.promoCode.discountValue) / 100)
+        } else {
+          discount = parseFloat(data.promoCode.discountValue)
+        }
+        setFinalPrice((priceNum - discount).toFixed(2))
+        setShowPromoInput(false)
+        setPromoInputValue('')
+      }
+    } catch (err) {
+      console.error('Promo code error:', err)
+      setPromoError('Failed to validate promo code')
+      setPromoCode(null)
+      setFinalPrice(null)
+    }
+  }
+
+  const removePromoCode = () => {
+    setPromoCode(null)
+    setFinalPrice(null)
+    setPromoError('')
+  }
 
   // ================= BUY NOW FUNCTION =================
   const buyNow = async (product) => {
@@ -140,9 +198,17 @@ export default function ProductPage() {
   /* ================= SCROLL LISTENER FOR FIXED BUTTON ================= */
   useEffect(() => {
     const handleScroll = () => {
-      if (!topBuyRef.current) return
-      const rect = topBuyRef.current.getBoundingClientRect()
-      setShowFixedBuy(rect.bottom < 0)
+      if (!topBuyRef.current || !footerRef.current) return
+      
+      const topBuyRect = topBuyRef.current.getBoundingClientRect()
+      const footerRect = footerRef.current.getBoundingClientRect()
+      
+      // Show fixed button when top button is scrolled out of view
+      // Hide fixed button when footer is visible
+      const topButtonOutOfView = topBuyRect.bottom < 0
+      const footerIsVisible = footerRect.top < window.innerHeight
+      
+      setShowFixedBuy(topButtonOutOfView && !footerIsVisible)
     }
 
     window.addEventListener('scroll', handleScroll)
@@ -157,8 +223,8 @@ export default function ProductPage() {
     )
 
   return (
-    <MainLayout>
-      <div className="max-w-7xl mx-auto py-16 px-6 space-y-8 pb-36">
+    <MainLayout footerRef={footerRef}>
+      <div className={`max-w-7xl mx-auto py-16 px-6 space-y-8 ${showFixedBuy ? 'pb-36' : ''}`}>
 
         {/* ================= HEADER ================= */}
         <div className="md:flex md:items-center md:space-x-12 space-y-8 md:space-y-0">
@@ -174,32 +240,105 @@ export default function ProductPage() {
             <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight">
               {product.name}
             </h1>
-            {finalPrice ? (
-              <div className="flex items-baseline gap-3">
-                <p className="text-2xl text-gray-400 line-through">${product.price}</p>
-                <p className="text-4xl md:text-5xl font-bold text-gradient bg-clip-text text-transparent from-green-400 to-blue-500">
-                  ${finalPrice}
-                </p>
-              </div>
-            ) : (
-              <p className="text-4xl md:text-5xl font-bold text-gradient bg-clip-text text-transparent from-green-400 to-blue-500">
-                ${product.price}
-              </p>
-            )}
             
-            {promoCode && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-green-600 font-medium">✓ Promo code applied: {promoCode}</span>
+            {/* ================= PRICE DISPLAY ================= */}
+            <div className="space-y-3">
+              {finalPrice ? (
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-6 border-2 border-green-200 shadow-lg">
+                  <div className="flex items-baseline justify-center md:justify-start gap-3">
+                    <span className="text-2xl text-gray-400 line-through font-medium">
+                      ${product.price}
+                    </span>
+                    <span className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-green-500 to-blue-600 bg-clip-text text-transparent">
+                      ${finalPrice}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-center md:text-left">
+                    <span className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Promo Applied: {promoCode}
+                      <button
+                        className="ml-2 text-red-500 hover:text-red-700 font-bold"
+                        onClick={removePromoCode}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border-2 border-blue-200 shadow-lg">
+                  <span className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
+                    ${product.price}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* ================= PROMO CODE INPUT ================= */}
+            {!promoCode && (
+              <div className="space-y-2">
+                <button
+                  className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 text-sm font-medium transition-colors"
+                  onClick={() => setShowPromoInput(!showPromoInput)}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                  </svg>
+                  Have a coupon code?
+                </button>
+
+                {showPromoInput && (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      placeholder="Enter coupon code"
+                      value={promoInputValue}
+                      onChange={(e) => {
+                        setPromoInputValue(e.target.value)
+                        setPromoError('')
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          validatePromoCode()
+                        }
+                      }}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    />
+                    <button 
+                      className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-sm font-bold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                      onClick={validatePromoCode}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+
+                {promoError && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {promoError}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* ================= TOP BUY NOW BUTTON ================= */}
+            {/* ================= BUY NOW BUTTON ================= */}
             <div ref={topBuyRef}>
               <Button
-                className="bg-gradient-to-r from-blue-500 to-green-400 text-white px-10 py-4 text-xl rounded-xl shadow-lg hover:scale-105 transform transition duration-300"
+                className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white px-10 py-5 text-xl font-bold rounded-2xl shadow-2xl hover:shadow-3xl transform transition-all duration-300 hover:scale-105 hover:-translate-y-1"
                 onClick={() => buyNow(product)}
               >
-                Buy Now
+                <span className="flex items-center justify-center gap-3">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                  Buy Now
+                </span>
               </Button>
             </div>
           </div>
@@ -313,13 +452,45 @@ export default function ProductPage() {
 
       {/* ================= CONDITIONAL FIXED BOTTOM BUY BUTTON ================= */}
       {showFixedBuy && (
-        <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-md border-t border-gray-200 py-4 px-6 flex justify-center z-50 shadow-lg">
-          <Button
-            className="w-full max-w-xl md:w-auto bg-gradient-to-r from-blue-500 to-green-400 text-white px-10 py-4 text-xl rounded-xl shadow-lg hover:scale-105 transform transition duration-300"
-            onClick={() => buyNow(product)}
-          >
-            Buy Now
-          </Button>
+        <div className="fixed bottom-0 left-0 w-full bg-gradient-to-r from-white/98 to-gray-50/98 backdrop-blur-xl border-t-2 border-gray-200 py-4 px-6 flex justify-center z-50 shadow-2xl">
+          <div className="w-full max-w-4xl flex items-center justify-between gap-6 bg-white/80 rounded-2xl p-3 shadow-lg">
+            {/* Product Image */}
+            <div className="flex items-center gap-4 flex-2">
+              <img
+                src={product.image}
+                alt={product.name}
+                className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover shadow-md"
+              />
+              
+              {/* Product Info */}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-900 text-base md:text-lg truncate pr-2">
+                  {product.name}
+                </h3>
+                <div className="flex items-baseline gap-2 mt-1">
+                  {finalPrice && (
+                    <span className="text-sm text-gray-400 line-through">${product.price}</span>
+                  )}
+                  <span className="text-xl md:text-2xl font-extrabold bg-gradient-to-r from-green-500 to-blue-600 bg-clip-text text-transparent">
+                    ${finalPrice || product.price}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Buy Now Button */}
+            <Button
+              className="flex-1 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white px-6 py-3 md:px-8 md:py-4 text-base md:text-lg font-bold rounded-xl shadow-xl hover:shadow-2xl transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 min-w-[140px]"
+              onClick={() => buyNow(product)}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                Buy Now
+              </span>
+            </Button>
+          </div>
         </div>
       )}
     </MainLayout>

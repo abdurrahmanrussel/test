@@ -12,7 +12,6 @@ on:
 
 env:
   NODE_VERSION: '20.x'
-  EC2_HOST: ${{ secrets.EC2_HOST }}
   EC2_USER: ubuntu
   DEPLOY_PATH: /home/ubuntu/my-react-app
 

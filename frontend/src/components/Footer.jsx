@@ -1,11 +1,12 @@
 // src/components/Footer.jsx
+import React from 'react'
 import partner1 from '../assets/partner1.png'
 import partner2 from '../assets/partner2.png'
 import partner3 from '../assets/partner3.png'
 
-const Footer = () => {
+const Footer = React.forwardRef(({ footerRef }, ref) => {
   return (
-    <footer className="bg-slate-900 text-slate-400 pt-16">
+    <footer ref={ref || footerRef} className="bg-slate-900 text-slate-400 pt-16">
       <div className="max-w-7xl mx-auto px-8 grid md:grid-cols-4 gap-12">
         <div>
           <h3 className="text-white font-bold text-xl mb-4">AA Trading</h3>
@@ -62,6 +63,8 @@ const Footer = () => {
       </div>
     </footer>
   )
-}
+})
+
+Footer.displayName = 'Footer'
 
 export default Footer
