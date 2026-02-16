@@ -201,6 +201,27 @@ export const createOrder = async (orderData) => {
   }
 }
 
+// Get order by Stripe Payment ID (for idempotency check)
+export const getOrderByPaymentId = async (stripePaymentId) => {
+  const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID
+  try {
+    const url = `${encodeURIComponent(ORDERS_TABLE_ID)}?filterByFormula={Stripe Payment ID}="${stripePaymentId}"`
+    const response = await airtableFetch(url)
+    
+    if (!response.ok) {
+      const error = await response.json()
+      console.error('[getOrderByPaymentId] Airtable error:', error)
+      throw new Error(error.error?.message || 'Failed to fetch order')
+    }
+
+    const data = await response.json()
+    return data.records?.[0] || null // Return first matching order or null
+  } catch (error) {
+    console.error('[getOrderByPaymentId] Error:', error)
+    throw error
+  }
+}
+
 // Update order status
 export const updateOrderStatus = async (orderId, status) => {
   const ORDERS_TABLE_ID = process.env.AIRTABLE_ORDERS_TABLE_ID

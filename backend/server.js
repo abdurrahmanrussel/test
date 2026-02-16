@@ -42,7 +42,7 @@ import authController from './controllers/authController.js'
 import ordersController from './controllers/ordersController.js'
 import productsController from './controllers/productsController.js'
 import promoCodesController from './controllers/promoCodesController.js'
-import { createOrder } from './services/airtableOrderService.js'
+import { createOrder, getOrderByPaymentId } from './services/airtableOrderService.js'
 import * as userService from './services/airtableUserService.js'
 import { authenticateToken, generateCSRFToken } from './middleware/auth.js'
 import { requireAdmin } from './middleware/admin.js'
@@ -115,6 +115,18 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
           console.error('❌ Missing required order data:', { productId, productName, amount })
           throw new Error('Missing required order data')
         }
+
+        // IDEMPOTENCY CHECK: Check if order already exists for this payment
+        console.log('🔍 Checking for existing order with payment ID:', stripePaymentId)
+        const existingOrder = await getOrderByPaymentId(stripePaymentId)
+        
+        if (existingOrder) {
+          console.log('✅ Order already exists for this payment - skipping duplicate creation')
+          console.log('📋 Existing order ID:', existingOrder.id)
+          return res.json({ received: true, orderId: existingOrder.id, duplicate: true })
+        }
+        
+        console.log('🆕 No existing order found - creating new order')
 
         // Get user account details from userId (no email matching needed)
         let userAccountEmail = ''
