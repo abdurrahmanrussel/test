@@ -30,10 +30,16 @@ export default function ProductPage() {
   // ================= BUY NOW FUNCTION =================
   const buyNow = async (product) => {
     try {
+      // Use relative path if on same domain, otherwise use API_URL
       const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4242'
+      const apiUrl = backendUrl.includes(window.location.origin) ? '/api/create-checkout-session' : `${backendUrl}/api/create-checkout-session`
       const token = localStorage.getItem('token')
       
-      const res = await fetch(`${backendUrl}/api/create-checkout-session`, {
+      console.log('Buy Now - API URL:', apiUrl)
+      console.log('Buy Now - Current origin:', window.location.origin)
+      console.log('Buy Now - Backend URL from env:', backendUrl)
+      
+      const res = await fetch(apiUrl, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
