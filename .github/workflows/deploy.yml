@@ -141,7 +141,7 @@ jobs:
 
       - name: Setup Environment Files on EC2
         run: |
-          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ${{ env.DEPLOY_PATH }} && mkdir -p logs && cp backend/.env.production backend/.env"
+          ssh -i ~/.ssh/ec2_key.pem ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ${{ env.DEPLOY_PATH }} && mkdir -p logs && cp backend/.env.production backend/.env && echo 'Environment files set up' && ls -la backend/.env"
 
       - name: Deploy Frontend to Nginx
         run: |
